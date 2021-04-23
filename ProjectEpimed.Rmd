@@ -1,0 +1,87 @@
+---
+title: "Epimed"
+author: "Gabriel Alonso"
+date: "23/04/2021"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r converttocsv}
+#This part of the program converts dataset.RData into a CV file (dt.csv)
+rm(list = ls())
+resave <- function(dataset){
+  e <- new.env(parent = emptyenv())
+  load(dataset, envir = e)
+  objs <- ls(envir = e, all.names = TRUE)
+  for(obj in objs) {
+    .x <- get(obj, envir =e)
+    message(sprintf('Saving %s as %s.csv', obj,obj) )
+    write.csv(.x, file = paste0(obj, '.csv'))
+  }
+}
+
+  resave('dataset.RData')
+```
+```{r data_analysis}
+dt = read.csv("dt.csv",header=TRUE, sep = ",") #read csv file and separate the cells
+dt = dt[,c(3,4,6,7,8,5)] #changing the order, to put the last column as the classes ('A' = Alive or 'D' = Dead)
+dt = na.omit(dt) #deleting the missing data
+
+for (i in 1:5){
+  dt[,i] = as.factor(dt[,i]) #changing the type of data from int to factor
+}
+dt_infos = str(dt) #infos of the dataset
+dt_summary = summary(dt$UnitDischargeCode) #summary of the dataset 
+barplot(table(dt$UnitDischargeCode)) #show the quantity of observations from each class
+dt = dt[order(dt$UnitDischargeCode),] #order the dataset by class
+
+dt_index = which(dt$UnitDischargeCode == 'A') #number of observations
+deleteindex = sample(dt_index, length(dt_index) - 1260) #number of observations of class A to delete
+dt1 = dt[-deleteindex, ] #new dataset with the same quantity of 'A' cases and 'D'
+barplot(table(dt1$UnitDischargeCode)) #show the quantity of observations from each class after data balance
+
+```
+```{r classification}
+library(caret) 
+library(rpart)
+
+#this part of the program trains the data in a classification model to predict the probability of the classes, given new data
+
+indextrain = createDataPartition(dt1$UnitDischargeCode, p = 0.70,list = FALSE) #division of training and test data to 
+dt1_training = dt1[indextrain,]
+dt1_testing = dt1[-indextrain,]
+
+set.seed(123)
+ctrl = trainControl(method = "repeatedcv", 
+                     number = 10,
+                     repeats = 3,
+                     rpart.control(minsplit = 10, minbucket = 5),
+                     classProbs = TRUE,
+                          summaryFunction = defaultSummary)
+
+dtFit = train(UnitDischargeCode ~ .,
+      method     = "rpart",
+      parms = list(split = "gini"),
+      trControl  = ctrl,
+      metric = "Accuracy",
+      data = dt1_training)
+dtFit
+
+
+```
+
+```{r probability of }
+#This is the result of the data
+predict(dtFit,dt1_testing,type='prob')
+dt1_testing
+```
+
+
+
